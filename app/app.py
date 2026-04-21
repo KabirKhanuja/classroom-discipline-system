@@ -1,9 +1,16 @@
 import cv2
+import os
 import requests
 import time
 
-CHANNEL_ID = "YOUR_CHANNEL_ID"
-READ_API = "YOUR_READ_API_KEY"
+CHANNEL_ID = os.getenv("THINGSPEAK_CHANNEL_ID")
+READ_API = os.getenv("THINGSPEAK_READ_API_KEY")
+
+if not CHANNEL_ID or not READ_API:
+    raise SystemExit(
+        "Missing ThingSpeak credentials. Set THINGSPEAK_CHANNEL_ID and "
+        "THINGSPEAK_READ_API_KEY environment variables."
+    )
 
 url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds/last.json?api_key={READ_API}"
 
@@ -18,12 +25,12 @@ while True:
     # fetch every 5 sec
     if time.time() - last_fetch > 5:
         try:
-            data = requests.get(url).json()
+            data = requests.get(url, timeout=5).json()
             sid1 = int(float(data["field1"]))
             sid2 = int(float(data["field2"]))
             print("Sid1:", sid1, "Sid2:", sid2)
             last_fetch = time.time()
-        except:
+        except (requests.RequestException, ValueError, TypeError, KeyError):
             pass
 
     ret, frame = cap.read()
