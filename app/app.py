@@ -118,6 +118,107 @@ def compute_insights(df: pd.DataFrame, threshold: int) -> dict:
 	}
 
 
+def detect_discipline_loss_windows(df: pd.DataFrame, threshold: int, max_gap_sec: int = 90) -> pd.DataFrame:
+	if df.empty:
+		return pd.DataFrame(
+			columns=[
+				"start_time",
+				"end_time",
+				"duration_sec",
+				"duration_min",
+				"peak_noise",
+				"dominant_zone",
+			]
+		)
+
+	work = df.sort_values("time").copy()
+	windows = []
+	current = None
+
+	def close_window(win):
+		duration = max(int((win["end"] - win["start"]).total_seconds()), 0)
+		if win["both_count"] >= max(win["left_count"], win["right_count"]):
+			dominant_zone = "Both"
+		elif win["left_count"] > win["right_count"]:
+			dominant_zone = "Left"
+		elif win["right_count"] > win["left_count"]:
+			dominant_zone = "Right"
+		else:
+			dominant_zone = "Balanced"
+
+		windows.append(
+			{
+				"start_time": win["start"],
+				"end_time": win["end"],
+				"duration_sec": duration,
+				"duration_min": round(duration / 60.0, 2),
+				"peak_noise": win["peak_noise"],
+				"dominant_zone": dominant_zone,
+			}
+		)
+
+	for row in work.itertuples(index=False):
+		timestamp = row.time
+		sid1_high = row.sid1 > threshold
+		sid2_high = row.sid2 > threshold
+		is_noisy = sid1_high or sid2_high
+
+		if not is_noisy:
+			if current is not None:
+				close_window(current)
+				current = None
+			continue
+
+		if current is None:
+			current = {
+				"start": timestamp,
+				"end": timestamp,
+				"peak_noise": max(int(row.sid1), int(row.sid2)),
+				"left_count": 0,
+				"right_count": 0,
+				"both_count": 0,
+			}
+		else:
+			gap = (timestamp - current["end"]).total_seconds()
+			if gap > max_gap_sec:
+				close_window(current)
+				current = {
+					"start": timestamp,
+					"end": timestamp,
+					"peak_noise": max(int(row.sid1), int(row.sid2)),
+					"left_count": 0,
+					"right_count": 0,
+					"both_count": 0,
+				}
+			else:
+				current["end"] = timestamp
+				current["peak_noise"] = max(current["peak_noise"], int(row.sid1), int(row.sid2))
+
+		if sid1_high and sid2_high:
+			current["both_count"] += 1
+		elif sid1_high:
+			current["left_count"] += 1
+		elif sid2_high:
+			current["right_count"] += 1
+
+	if current is not None:
+		close_window(current)
+
+	if not windows:
+		return pd.DataFrame(
+			columns=[
+				"start_time",
+				"end_time",
+				"duration_sec",
+				"duration_min",
+				"peak_noise",
+				"dominant_zone",
+			]
+		)
+
+	return pd.DataFrame(windows)
+
+
 st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
 
 st.markdown(
@@ -229,6 +330,7 @@ with st.sidebar:
 	st.subheader("Controls")
 	threshold = st.slider("Noise Threshold", 200, 4095, default_threshold, 50)
 	history_points = st.slider("History Points", 20, 500, 120, 20)
+	max_gap_sec = st.slider("Window Merge Gap (sec)", 15, 300, 90, 15)
 	refresh_sec = st.slider("Dashboard Refresh (sec)", 3, 30, 10, 1)
 	auto_refresh = st.toggle("Auto Refresh Analytics", value=True)
 
@@ -328,6 +430,30 @@ else:
 		use_container_width=True,
 		hide_index=True,
 	)
+
+	st.subheader("Discipline Loss Windows")
+	loss_windows = detect_discipline_loss_windows(history_df, threshold, max_gap_sec=max_gap_sec)
+	if loss_windows.empty:
+		st.success("No discipline-loss windows found for the selected trend range.")
+	else:
+		total_loss_min = loss_windows["duration_min"].sum()
+		window_count = len(loss_windows)
+		c1, c2 = st.columns(2)
+		c1.metric("Loss Windows", window_count)
+		c2.metric("Total Loss Time (min)", f"{total_loss_min:.2f}")
+
+		for idx, row in loss_windows.iterrows():
+			start_txt = row["start_time"].strftime("%H:%M:%S")
+			end_txt = row["end_time"].strftime("%H:%M:%S")
+			st.write(
+				f"{idx + 1}. {start_txt} to {end_txt} | Zone: {row['dominant_zone']} | "
+				f"Peak: {int(row['peak_noise'])}"
+			)
+
+		display_windows = loss_windows.copy()
+		display_windows["start_time"] = display_windows["start_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+		display_windows["end_time"] = display_windows["end_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
+		st.dataframe(display_windows, use_container_width=True, hide_index=True)
 
 if auto_refresh:
 	time.sleep(refresh_sec)
