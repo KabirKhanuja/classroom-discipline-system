@@ -1,8 +1,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-const char* ssid = "sos";
-const char* password = "cosmos0057";
+const char* ssid = "your_wifi_name";
+const char* password = "your_wifi_password";
 
 String apiKey = "your_api_key";
 const char* server = "https://api.thingspeak.com/update";
