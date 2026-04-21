@@ -1,0 +1,8 @@
+#ifndef ENV_CONFIG_H
+#define ENV_CONFIG_H
+
+static const char WIFI_SSID[] = "your_wifi_name";
+static const char WIFI_PASSWORD[] = "your_wifi_password";
+static const char THINGSPEAK_API_KEY[] = "your_api_key";
+
+#endif

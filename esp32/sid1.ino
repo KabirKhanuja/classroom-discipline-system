@@ -1,10 +1,11 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include "env_config.h"
 
-const char* ssid = "your_wifi_name";
-const char* password = "your_wifi_password";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
-String apiKey = "your_api_key";
+const char* apiKey = THINGSPEAK_API_KEY;
 const char* server = "https://api.thingspeak.com/update";
 
 const int micPin = 34;
@@ -46,8 +47,9 @@ void loop() {
     HTTPClient http;
 
     String url = server;
-    url += "?api_key=" + apiKey;
-    url += "&field2=" + String(val);
+    url += "?api_key=";
+    url += apiKey;
+    url += "&field1=" + String(val);
 
     http.begin(url);
     http.GET();

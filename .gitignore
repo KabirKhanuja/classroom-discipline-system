@@ -1,2 +1,3 @@
 app/.env
 esp32/.env
+esp32/env_config.h
