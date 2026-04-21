@@ -1,12 +1,14 @@
+import importlib
 import threading
 import time
 from dataclasses import dataclass
-import importlib
 
 import cv2
 import pandas as pd
 import requests
 import streamlit as st
+
+from cam import annotate_noise_zones, fetch_latest_noise, get_last_feed_url, get_thingspeak_config
 
 try:
 	av = importlib.import_module("av")
@@ -16,8 +18,6 @@ try:
 	WEBRTC_AVAILABLE = True
 except ModuleNotFoundError:
 	WEBRTC_AVAILABLE = False
-
-from cam import annotate_noise_zones, fetch_latest_noise, get_last_feed_url, get_thingspeak_config
 
 
 @dataclass
@@ -118,10 +118,104 @@ def compute_insights(df: pd.DataFrame, threshold: int) -> dict:
 	}
 
 
-st.set_page_config(page_title="Smart Classroom Monitor", page_icon="", layout="wide")
+st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
+
+st.markdown(
+	"""
+	<style>
+		:root {
+			--app-bg-start: #f7f8fb;
+			--app-bg-end: #eef2f7;
+			--text-main: #1f2937;
+			--text-subtle: #4b5563;
+			--panel-bg: #ffffff;
+			--panel-border: #d8dee8;
+			--panel-shadow: 0 8px 18px rgba(20, 33, 61, 0.05);
+			--sidebar-bg: #f8fafc;
+			--sidebar-border: #d9e2ec;
+			--sidebar-heading: #111827;
+			--sidebar-text: #374151;
+			--sidebar-muted: #6b7280;
+		}
+
+		html[data-theme="dark"] {
+			--app-bg-start: #111827;
+			--app-bg-end: #0f172a;
+			--text-main: #e5e7eb;
+			--text-subtle: #cbd5e1;
+			--panel-bg: #111827;
+			--panel-border: #334155;
+			--panel-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+			--sidebar-bg: #111827;
+			--sidebar-border: #374151;
+			--sidebar-heading: #f3f4f6;
+			--sidebar-text: #e5e7eb;
+			--sidebar-muted: #94a3b8;
+		}
+
+		.stApp {
+			background: linear-gradient(120deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
+			color: var(--text-main);
+		}
+
+		h1, h2, h3, h4, h5, h6, p, span, label, div {
+			color: var(--text-main);
+		}
+
+		[data-testid="stCaptionContainer"] p,
+		[data-testid="stSidebar"] p,
+		[data-testid="stSidebar"] label {
+			color: var(--text-subtle);
+		}
+
+		[data-testid="stSidebar"] {
+			background: var(--sidebar-bg);
+			border-right: 1px solid var(--sidebar-border);
+		}
+
+		[data-testid="stSidebar"] h1,
+		[data-testid="stSidebar"] h2,
+		[data-testid="stSidebar"] h3 {
+			color: var(--sidebar-heading);
+			font-weight: 650;
+		}
+
+		[data-testid="stSidebar"] p,
+		[data-testid="stSidebar"] label,
+		[data-testid="stSidebar"] span,
+		[data-testid="stSidebar"] div {
+			color: var(--sidebar-text);
+		}
+
+		[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {
+			padding-top: 0.2rem;
+			padding-bottom: 0.2rem;
+		}
+
+		[data-testid="stSidebar"] .stSlider p,
+		[data-testid="stSidebar"] .stToggle label {
+			color: var(--sidebar-muted);
+		}
+
+		.block-container {
+			padding-top: 1.2rem;
+			max-width: 1200px;
+		}
+
+		.panel {
+			padding: 0.9rem 1rem;
+			border-radius: 14px;
+			border: 1px solid var(--panel-border);
+			background: var(--panel-bg);
+			box-shadow: var(--panel-shadow);
+		}
+	</style>
+	""",
+	unsafe_allow_html=True,
+)
 
 st.title("Smart Classroom Discipline Monitoring")
-st.caption("Live camera localization with ThingSpeak-backed classroom noise analytics")
+st.caption("Live camera localization with ThingSpeak-backed noise analytics")
 
 channel_id, read_api, default_threshold = get_thingspeak_config()
 if not channel_id or not read_api:
@@ -149,12 +243,13 @@ class CameraOverlayProcessor:
 	def recv(self, frame):
 		noise_cache.update_if_stale()
 		snap = noise_cache.get_snapshot()
-		img = frame.to_ndarray(format="bgr24")
-		annotated = annotate_noise_zones(img, snap.sid1, snap.sid2, threshold)
+		image = frame.to_ndarray(format="bgr24")
+		annotated = annotate_noise_zones(image, snap.sid1, snap.sid2, threshold)
 		return av.VideoFrame.from_ndarray(annotated, format="bgr24")
 
 
 st.subheader("Live Camera View")
+st.markdown('<div class="panel">', unsafe_allow_html=True)
 if WEBRTC_AVAILABLE:
 	webrtc_streamer(
 		key="smart-classroom-cam",
@@ -166,7 +261,7 @@ if WEBRTC_AVAILABLE:
 else:
 	st.warning(
 		"Live embedded camera requires streamlit-webrtc and av. "
-		"Install app/requirements.txt to enable it."
+		"Install dependencies in app/requirements.txt to enable it."
 	)
 	if st.button("Show Current Camera Snapshot"):
 		cap = cv2.VideoCapture(0)
@@ -179,6 +274,7 @@ else:
 			st.image(annotated, channels="BGR", use_container_width=True)
 		else:
 			st.error("Could not capture camera frame.")
+st.markdown("</div>", unsafe_allow_html=True)
 
 try:
 	noise_cache.update_if_stale()
@@ -194,11 +290,11 @@ elif current.sid1 > threshold:
 elif current.sid2 > threshold:
 	status_text = "High disturbance on right side"
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Sid1 (Left)", current.sid1)
-col2.metric("Sid2 (Right)", current.sid2)
-col3.metric("Difference", abs(current.sid1 - current.sid2))
-col4.metric("Live Status", status_text)
+metric1, metric2, metric3, metric4 = st.columns(4)
+metric1.metric("Sid1 (Left)", current.sid1)
+metric2.metric("Sid2 (Right)", current.sid2)
+metric3.metric("Difference", abs(current.sid1 - current.sid2))
+metric4.metric("Live Status", status_text)
 
 if current.last_error:
 	st.warning(f"Latest ThingSpeak fetch warning: {current.last_error}")
@@ -211,20 +307,20 @@ except requests.RequestException as exc:
 	history_df = pd.DataFrame(columns=["time", "sid1", "sid2"])
 
 if history_df.empty:
-	st.info("No valid history available yet. Check whether field1 and field2 are being uploaded.")
+	st.info("No valid history available yet. Verify field1 and field2 uploads from ESP32 nodes.")
 else:
 	plot_df = history_df.set_index("time")[["sid1", "sid2"]]
 	st.line_chart(plot_df, use_container_width=True)
 
 	insights = compute_insights(history_df, threshold)
-	a1, a2, a3 = st.columns(3)
-	a1.metric("Average Sid1", f"{insights['avg_sid1']:.1f}")
-	a2.metric("Average Sid2", f"{insights['avg_sid2']:.1f}")
-	a3.metric("Dominant Disturbance Zone", insights["dominant_side"])
+	insight1, insight2, insight3 = st.columns(3)
+	insight1.metric("Average Sid1", f"{insights['avg_sid1']:.1f}")
+	insight2.metric("Average Sid2", f"{insights['avg_sid2']:.1f}")
+	insight3.metric("Dominant Disturbance Zone", insights["dominant_side"])
 
-	b1, b2 = st.columns(2)
-	b1.metric(f"Sid1 events > {threshold}", insights["events_sid1"])
-	b2.metric(f"Sid2 events > {threshold}", insights["events_sid2"])
+	event1, event2 = st.columns(2)
+	event1.metric(f"Sid1 events > {threshold}", insights["events_sid1"])
+	event2.metric(f"Sid2 events > {threshold}", insights["events_sid2"])
 
 	st.subheader("Recent Samples")
 	st.dataframe(

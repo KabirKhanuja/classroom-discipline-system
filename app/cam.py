@@ -44,10 +44,37 @@ def get_last_feed_url(channel_id: str, read_api: str) -> str:
     )
 
 
+def _parse_field_value(value):
+    if value is None or value == "":
+        return None
+    return int(float(value))
+
+
+def _build_recent_feeds_url(last_feed_url: str, results: int = 10) -> str:
+    return last_feed_url.replace("/feeds/last.json", "/feeds.json") + f"&results={results}"
+
+
 def fetch_latest_noise(session: requests.Session, url: str, timeout: int = 5) -> tuple[int, int]:
     data = session.get(url, timeout=timeout).json()
-    sid1 = int(float(data["field1"]))
-    sid2 = int(float(data["field2"]))
+    sid1 = _parse_field_value(data.get("field1"))
+    sid2 = _parse_field_value(data.get("field2"))
+
+    # Two nodes often update field1/field2 at different moments, so one field can
+    # be null in the very latest feed. Backfill from a few recent records.
+    if sid1 is None or sid2 is None:
+        recent_url = _build_recent_feeds_url(url, results=12)
+        recent = session.get(recent_url, timeout=timeout).json().get("feeds", [])
+        for feed in reversed(recent):
+            if sid1 is None:
+                sid1 = _parse_field_value(feed.get("field1"))
+            if sid2 is None:
+                sid2 = _parse_field_value(feed.get("field2"))
+            if sid1 is not None and sid2 is not None:
+                break
+
+    if sid1 is None or sid2 is None:
+        raise ValueError("ThingSpeak returned insufficient data for field1/field2")
+
     return sid1, sid2
 
 
