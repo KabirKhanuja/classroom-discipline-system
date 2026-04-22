@@ -246,22 +246,26 @@ def get_chart_palette() -> dict:
 			"sid1": "#93C5FD",
 			"sid2": "#FDBA74",
 			"text": "#E5E7EB",
+			"legend": "#F8FAFC",
 			"grid": "#334155",
 			"plot_bg": "#0F172A",
 			"paper_bg": "#111827",
 			"template": "plotly_dark",
 			"normal": "#475569",
+			"accent": "#F59E0B",
 		}
 
 	return {
 		"sid1": "#1D4ED8",
 		"sid2": "#C2410C",
 		"text": "#0F172A",
+		"legend": "#111827",
 		"grid": "#CBD5E1",
 		"plot_bg": "#FFFFFF",
 		"paper_bg": "#FFFFFF",
 		"template": "plotly_white",
 		"normal": "#94A3B8",
+		"accent": "#F59E0B",
 	}
 
 
@@ -274,6 +278,7 @@ def style_figure(fig, palette: dict, x_title: str = "Date", y_title: str = "Nois
 		xaxis_title=x_title,
 		yaxis_title=y_title,
 		legend_title_text="Signals",
+		legend={"font": {"color": palette["legend"]}, "title": {"font": {"color": palette["legend"]}}},
 	)
 	fig.update_xaxes(gridcolor=palette["grid"], tickfont={"color": palette["text"]}, title_font={"color": palette["text"]})
 	fig.update_yaxes(gridcolor=palette["grid"], tickfont={"color": palette["text"]}, title_font={"color": palette["text"]})
@@ -341,6 +346,7 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 		paper_bgcolor=palette["paper_bg"],
 		plot_bgcolor=palette["plot_bg"],
 		font={"color": palette["text"]},
+		legend={"font": {"color": palette["legend"]}, "title": {"font": {"color": palette["legend"]}}},
 	)
 	fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
 	st.plotly_chart(fig, use_container_width=True)
@@ -388,6 +394,7 @@ def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) ->
 			paper_bgcolor=palette["paper_bg"],
 			plot_bgcolor=palette["plot_bg"],
 			font={"color": palette["text"]},
+			legend={"font": {"color": palette["legend"]}, "title": {"font": {"color": palette["legend"]}}},
 		)
 		fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
 		slot.plotly_chart(fig, use_container_width=True)
@@ -468,6 +475,50 @@ st.markdown(
 		[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {
 			padding-top: 0.2rem;
 			padding-bottom: 0.2rem;
+		}
+
+		[data-testid="stSidebar"] [data-baseweb="select"] > div {
+			background: linear-gradient(180deg, #f46b45 0%, #d9480f 100%);
+			border: 1px solid #b63d0b;
+			box-shadow: 0 10px 22px rgba(217, 72, 15, 0.18);
+		}
+
+		[data-testid="stSidebar"] [data-baseweb="select"] input,
+		[data-testid="stSidebar"] [data-baseweb="select"] span {
+			color: #111827 !important;
+			font-weight: 600;
+		}
+
+		[data-testid="stSidebar"] [data-baseweb="select"] svg {
+			fill: #111827 !important;
+		}
+
+		[data-testid="stSidebar"] [data-baseweb="popover"] {
+			background: #fff7f2 !important;
+			border: 1px solid #f4c7ba !important;
+			box-shadow: 0 16px 28px rgba(217, 72, 15, 0.14) !important;
+		}
+
+		[data-testid="stSidebar"] [data-baseweb="menu"] {
+			background: #fff7f2 !important;
+		}
+
+		[data-testid="stSidebar"] [role="listbox"] {
+			background: #fff7f2 !important;
+			color: #111827 !important;
+		}
+
+		[data-testid="stSidebar"] [role="option"] {
+			color: #111827 !important;
+		}
+
+		[data-testid="stSidebar"] [role="option"][aria-selected="true"] {
+			background: #ffe1d5 !important;
+			color: #7c2d12 !important;
+		}
+
+		[data-testid="stSidebar"] [role="option"]:hover {
+			background: #ffd6c5 !important;
 		}
 
 		[data-testid="stSidebar"] .stSlider p,
