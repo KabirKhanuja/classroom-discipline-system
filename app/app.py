@@ -73,18 +73,36 @@ def fetch_history(channel_id: str, read_api: str, results: int) -> pd.DataFrame:
 
 	rows = []
 	for item in feeds:
-		try:
-			rows.append(
-				{
-					"time": pd.to_datetime(item["created_at"]),
-					"sid1": int(float(item["field1"])),
-					"sid2": int(float(item["field2"])),
-				}
-			)
-		except (TypeError, ValueError, KeyError):
+		timestamp = pd.to_datetime(item.get("created_at"), errors="coerce")
+		if pd.isna(timestamp):
 			continue
 
-	return pd.DataFrame(rows)
+		sid1_val = pd.to_numeric(item.get("field1"), errors="coerce")
+		sid2_val = pd.to_numeric(item.get("field2"), errors="coerce")
+
+		rows.append(
+			{
+				"time": timestamp,
+				"sid1": sid1_val,
+				"sid2": sid2_val,
+			}
+		)
+
+	if not rows:
+		return pd.DataFrame(columns=["time", "sid1", "sid2"])
+
+	df = pd.DataFrame(rows).sort_values("time")
+
+	# Field1/field2 are often posted by different nodes at different timestamps.
+	# Forward-fill each signal so trends are visible even when one field is null.
+	df[["sid1", "sid2"]] = df[["sid1", "sid2"]].ffill()
+	df = df.dropna(subset=["sid1", "sid2"], how="all")
+
+	if df.empty:
+		return pd.DataFrame(columns=["time", "sid1", "sid2"])
+
+	df[["sid1", "sid2"]] = df[["sid1", "sid2"]].fillna(0).astype(int)
+	return df
 
 
 def compute_insights(df: pd.DataFrame, threshold: int) -> dict:
