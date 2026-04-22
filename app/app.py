@@ -238,12 +238,49 @@ def detect_discipline_loss_windows(df: pd.DataFrame, threshold: int, max_gap_sec
 	return pd.DataFrame(windows)
 
 
-SID1_COLOR = "#8ED1FC"
-SID2_COLOR = "#F9C89B"
-GRID_COLOR = "#E2E8F0"
+def get_chart_palette() -> dict:
+	base_theme = (st.get_option("theme.base") or "light").lower()
+	is_dark = base_theme == "dark"
+	if is_dark:
+		return {
+			"sid1": "#93C5FD",
+			"sid2": "#FDBA74",
+			"text": "#E5E7EB",
+			"grid": "#334155",
+			"plot_bg": "#0F172A",
+			"paper_bg": "#111827",
+			"template": "plotly_dark",
+			"normal": "#475569",
+		}
+
+	return {
+		"sid1": "#1D4ED8",
+		"sid2": "#C2410C",
+		"text": "#0F172A",
+		"grid": "#CBD5E1",
+		"plot_bg": "#FFFFFF",
+		"paper_bg": "#FFFFFF",
+		"template": "plotly_white",
+		"normal": "#94A3B8",
+	}
+
+
+def style_figure(fig, palette: dict, x_title: str = "Date", y_title: str = "Noise") -> None:
+	fig.update_layout(
+		template=palette["template"],
+		plot_bgcolor=palette["plot_bg"],
+		paper_bgcolor=palette["paper_bg"],
+		font={"color": palette["text"]},
+		xaxis_title=x_title,
+		yaxis_title=y_title,
+		legend_title_text="Signals",
+	)
+	fig.update_xaxes(gridcolor=palette["grid"], tickfont={"color": palette["text"]}, title_font={"color": palette["text"]})
+	fig.update_yaxes(gridcolor=palette["grid"], tickfont={"color": palette["text"]}, title_font={"color": palette["text"]})
 
 
 def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
+	palette = get_chart_palette()
 	if chart_type == "Line":
 		fig = px.line(
 			df,
@@ -260,22 +297,13 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 		)
 		fig.update_traces(
 			selector={"name": "sid1"},
-			line={"color": SID1_COLOR},
+			line={"color": palette["sid1"]},
 		)
 		fig.update_traces(
 			selector={"name": "sid2"},
-			line={"color": SID2_COLOR},
+			line={"color": palette["sid2"]},
 		)
-		fig.update_layout(
-			template="plotly_white",
-			plot_bgcolor="#F8FAFC",
-			paper_bgcolor="#FFFFFF",
-			xaxis_title="Date",
-			yaxis_title="Noise",
-			legend_title_text="Signals",
-		)
-		fig.update_xaxes(gridcolor=GRID_COLOR)
-		fig.update_yaxes(gridcolor=GRID_COLOR)
+		style_figure(fig, palette)
 		st.plotly_chart(fig, use_container_width=True)
 		return
 
@@ -287,18 +315,10 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 			y="noise",
 			color="signal",
 			barmode="group",
-			color_discrete_map={"sid1": SID1_COLOR, "sid2": SID2_COLOR},
+			color_discrete_map={"sid1": palette["sid1"], "sid2": palette["sid2"]},
 			labels={"time": "Time", "noise": "Noise", "signal": "Signal"},
 		)
-		fig.update_layout(
-			template="plotly_white",
-			plot_bgcolor="#F8FAFC",
-			paper_bgcolor="#FFFFFF",
-			xaxis_title="Date",
-			yaxis_title="Noise",
-		)
-		fig.update_xaxes(gridcolor=GRID_COLOR)
-		fig.update_yaxes(gridcolor=GRID_COLOR)
+		style_figure(fig, palette)
 		st.plotly_chart(fig, use_container_width=True)
 		return
 
@@ -313,50 +333,37 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 		values="total_noise",
 		names="signal",
 		color="signal",
-		color_discrete_map={"sid1": SID1_COLOR, "sid2": SID2_COLOR},
+		color_discrete_map={"sid1": palette["sid1"], "sid2": palette["sid2"]},
 		title=f"Noise share across selected range (threshold {threshold})",
 	)
 	fig.update_layout(
-		template="plotly_white",
-		paper_bgcolor="#FFFFFF",
+		template=palette["template"],
+		paper_bgcolor=palette["paper_bg"],
+		plot_bgcolor=palette["plot_bg"],
+		font={"color": palette["text"]},
 	)
-	fig.update_traces(textposition="inside", textinfo="percent+label")
+	fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
 	st.plotly_chart(fig, use_container_width=True)
 
 
 def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
 	col1, col2 = st.columns(2)
+	palette = get_chart_palette()
 
 	def _single_signal(signal_col: str, color: str, title: str, slot) -> None:
 		if chart_type == "Line":
 			fig = px.line(df, x="time", y=signal_col, labels={"time": "Time", signal_col: "Noise"})
 			fig.update_traces(line={"width": 3, "color": color}, marker={"size": 6})
-			fig.update_layout(
-				template="plotly_white",
-				plot_bgcolor="#F8FAFC",
-				paper_bgcolor="#FFFFFF",
-				title=title,
-				xaxis_title="Date",
-				yaxis_title="Noise",
-			)
-			fig.update_xaxes(gridcolor=GRID_COLOR)
-			fig.update_yaxes(gridcolor=GRID_COLOR)
+			style_figure(fig, palette)
+			fig.update_layout(title=title, legend_title_text="")
 			slot.plotly_chart(fig, use_container_width=True)
 			return
 
 		if chart_type == "Bar":
 			fig = px.bar(df, x="time", y=signal_col, labels={"time": "Time", signal_col: "Noise"})
 			fig.update_traces(marker_color=color)
-			fig.update_layout(
-				template="plotly_white",
-				plot_bgcolor="#F8FAFC",
-				paper_bgcolor="#FFFFFF",
-				title=title,
-				xaxis_title="Date",
-				yaxis_title="Noise",
-			)
-			fig.update_xaxes(gridcolor=GRID_COLOR)
-			fig.update_yaxes(gridcolor=GRID_COLOR)
+			style_figure(fig, palette)
+			fig.update_layout(title=title, legend_title_text="")
 			slot.plotly_chart(fig, use_container_width=True)
 			return
 
@@ -373,15 +380,20 @@ def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) ->
 			values="count",
 			names="zone",
 			color="zone",
-			color_discrete_map={"Above threshold": color, "Normal": "#DCEBFA"},
+			color_discrete_map={"Above threshold": color, "Normal": palette["normal"]},
 			title=f"{title}: Event share",
 		)
-		fig.update_layout(template="plotly_white", paper_bgcolor="#FFFFFF")
-		fig.update_traces(textposition="inside", textinfo="percent+label")
+		fig.update_layout(
+			template=palette["template"],
+			paper_bgcolor=palette["paper_bg"],
+			plot_bgcolor=palette["plot_bg"],
+			font={"color": palette["text"]},
+		)
+		fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
 		slot.plotly_chart(fig, use_container_width=True)
 
-	_single_signal("sid1", SID1_COLOR, "SID1 Trend", col1)
-	_single_signal("sid2", SID2_COLOR, "SID2 Trend", col2)
+	_single_signal("sid1", palette["sid1"], "SID1 Trend", col1)
+	_single_signal("sid2", palette["sid2"], "SID2 Trend", col2)
 
 
 st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
