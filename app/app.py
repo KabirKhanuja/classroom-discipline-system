@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import cv2
 import pandas as pd
+import plotly.express as px
 import requests
 import streamlit as st
 
@@ -237,6 +238,152 @@ def detect_discipline_loss_windows(df: pd.DataFrame, threshold: int, max_gap_sec
 	return pd.DataFrame(windows)
 
 
+SID1_COLOR = "#8ED1FC"
+SID2_COLOR = "#F9C89B"
+GRID_COLOR = "#E2E8F0"
+
+
+def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
+	if chart_type == "Line":
+		fig = px.line(
+			df,
+			x="time",
+			y=["sid1", "sid2"],
+			labels={"time": "Time", "value": "Noise", "variable": "Signal"},
+		)
+		fig.for_each_trace(
+			lambda trace: trace.update(
+				line={"width": 3},
+				marker={"size": 6},
+				name=trace.name.upper(),
+			)
+		)
+		fig.update_traces(
+			selector={"name": "sid1"},
+			line={"color": SID1_COLOR},
+		)
+		fig.update_traces(
+			selector={"name": "sid2"},
+			line={"color": SID2_COLOR},
+		)
+		fig.update_layout(
+			template="plotly_white",
+			plot_bgcolor="#F8FAFC",
+			paper_bgcolor="#FFFFFF",
+			xaxis_title="Date",
+			yaxis_title="Noise",
+			legend_title_text="Signals",
+		)
+		fig.update_xaxes(gridcolor=GRID_COLOR)
+		fig.update_yaxes(gridcolor=GRID_COLOR)
+		st.plotly_chart(fig, use_container_width=True)
+		return
+
+	if chart_type == "Bar":
+		bar_df = df.melt(id_vars="time", value_vars=["sid1", "sid2"], var_name="signal", value_name="noise")
+		fig = px.bar(
+			bar_df,
+			x="time",
+			y="noise",
+			color="signal",
+			barmode="group",
+			color_discrete_map={"sid1": SID1_COLOR, "sid2": SID2_COLOR},
+			labels={"time": "Time", "noise": "Noise", "signal": "Signal"},
+		)
+		fig.update_layout(
+			template="plotly_white",
+			plot_bgcolor="#F8FAFC",
+			paper_bgcolor="#FFFFFF",
+			xaxis_title="Date",
+			yaxis_title="Noise",
+		)
+		fig.update_xaxes(gridcolor=GRID_COLOR)
+		fig.update_yaxes(gridcolor=GRID_COLOR)
+		st.plotly_chart(fig, use_container_width=True)
+		return
+
+	pie_df = pd.DataFrame(
+		{
+			"signal": ["sid1", "sid2"],
+			"total_noise": [int(df["sid1"].sum()), int(df["sid2"].sum())],
+		}
+	)
+	fig = px.pie(
+		pie_df,
+		values="total_noise",
+		names="signal",
+		color="signal",
+		color_discrete_map={"sid1": SID1_COLOR, "sid2": SID2_COLOR},
+		title=f"Noise share across selected range (threshold {threshold})",
+	)
+	fig.update_layout(
+		template="plotly_white",
+		paper_bgcolor="#FFFFFF",
+	)
+	fig.update_traces(textposition="inside", textinfo="percent+label")
+	st.plotly_chart(fig, use_container_width=True)
+
+
+def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
+	col1, col2 = st.columns(2)
+
+	def _single_signal(signal_col: str, color: str, title: str, slot) -> None:
+		if chart_type == "Line":
+			fig = px.line(df, x="time", y=signal_col, labels={"time": "Time", signal_col: "Noise"})
+			fig.update_traces(line={"width": 3, "color": color}, marker={"size": 6})
+			fig.update_layout(
+				template="plotly_white",
+				plot_bgcolor="#F8FAFC",
+				paper_bgcolor="#FFFFFF",
+				title=title,
+				xaxis_title="Date",
+				yaxis_title="Noise",
+			)
+			fig.update_xaxes(gridcolor=GRID_COLOR)
+			fig.update_yaxes(gridcolor=GRID_COLOR)
+			slot.plotly_chart(fig, use_container_width=True)
+			return
+
+		if chart_type == "Bar":
+			fig = px.bar(df, x="time", y=signal_col, labels={"time": "Time", signal_col: "Noise"})
+			fig.update_traces(marker_color=color)
+			fig.update_layout(
+				template="plotly_white",
+				plot_bgcolor="#F8FAFC",
+				paper_bgcolor="#FFFFFF",
+				title=title,
+				xaxis_title="Date",
+				yaxis_title="Noise",
+			)
+			fig.update_xaxes(gridcolor=GRID_COLOR)
+			fig.update_yaxes(gridcolor=GRID_COLOR)
+			slot.plotly_chart(fig, use_container_width=True)
+			return
+
+		high_count = int((df[signal_col] > threshold).sum())
+		normal_count = max(len(df) - high_count, 0)
+		pie_df = pd.DataFrame(
+			{
+				"zone": ["Above threshold", "Normal"],
+				"count": [high_count, normal_count],
+			}
+		)
+		fig = px.pie(
+			pie_df,
+			values="count",
+			names="zone",
+			color="zone",
+			color_discrete_map={"Above threshold": color, "Normal": "#DCEBFA"},
+			title=f"{title}: Event share",
+		)
+		fig.update_layout(template="plotly_white", paper_bgcolor="#FFFFFF")
+		fig.update_traces(textposition="inside", textinfo="percent+label")
+		slot.plotly_chart(fig, use_container_width=True)
+
+	_single_signal("sid1", SID1_COLOR, "SID1 Trend", col1)
+	_single_signal("sid2", SID2_COLOR, "SID2 Trend", col2)
+
+
 st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
 
 st.markdown(
@@ -348,6 +495,8 @@ with st.sidebar:
 	st.subheader("Controls")
 	threshold = st.slider("Noise Threshold", 200, 4095, default_threshold, 50)
 	history_points = st.slider("History Points", 20, 500, 120, 20)
+	chart_layout = st.selectbox("Chart Layout", ["Combined", "Separate"])
+	chart_type = st.selectbox("Chart Type", ["Line", "Bar", "Pie"])
 	max_gap_sec = st.slider("Window Merge Gap (sec)", 15, 300, 90, 15)
 	refresh_sec = st.slider("Dashboard Refresh (sec)", 3, 30, 10, 1)
 	auto_refresh = st.toggle("Auto Refresh Analytics", value=True)
@@ -429,8 +578,10 @@ except requests.RequestException as exc:
 if history_df.empty:
 	st.info("No valid history available yet. Verify field1 and field2 uploads from ESP32 nodes.")
 else:
-	plot_df = history_df.set_index("time")[["sid1", "sid2"]]
-	st.line_chart(plot_df, use_container_width=True)
+	if chart_layout == "Combined":
+		render_combined_chart(history_df, chart_type, threshold)
+	else:
+		render_separate_charts(history_df, chart_type, threshold)
 
 	insights = compute_insights(history_df, threshold)
 	insight1, insight2, insight3 = st.columns(3)
