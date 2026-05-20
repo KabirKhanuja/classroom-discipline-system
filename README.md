@@ -16,3 +16,4 @@ some more results :
 <img width="1028" height="670" alt="image" src="https://github.com/user-attachments/assets/9a6db717-94c7-4bb9-ad94-5d4b64c95919" />
 
 
+how to run : cd app && streamlit run app.py
