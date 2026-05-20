@@ -488,50 +488,6 @@ st.markdown(
 			padding-bottom: 0.2rem;
 		}
 
-		[data-testid="stSidebar"] [data-baseweb="select"] > div {
-			background: linear-gradient(180deg, #f46b45 0%, #d9480f 100%);
-			border: 1px solid #b63d0b;
-			box-shadow: 0 10px 22px rgba(217, 72, 15, 0.18);
-		}
-
-		[data-testid="stSidebar"] [data-baseweb="select"] input,
-		[data-testid="stSidebar"] [data-baseweb="select"] span {
-			color: #111827 !important;
-			font-weight: 600;
-		}
-
-		[data-testid="stSidebar"] [data-baseweb="select"] svg {
-			fill: #111827 !important;
-		}
-
-		[data-testid="stSidebar"] [data-baseweb="popover"] {
-			background: #fff7f2 !important;
-			border: 1px solid #f4c7ba !important;
-			box-shadow: 0 16px 28px rgba(217, 72, 15, 0.14) !important;
-		}
-
-		[data-testid="stSidebar"] [data-baseweb="menu"] {
-			background: #fff7f2 !important;
-		}
-
-		[data-testid="stSidebar"] [role="listbox"] {
-			background: #fff7f2 !important;
-			color: #111827 !important;
-		}
-
-		[data-testid="stSidebar"] [role="option"] {
-			color: #111827 !important;
-		}
-
-		[data-testid="stSidebar"] [role="option"][aria-selected="true"] {
-			background: #ffe1d5 !important;
-			color: #7c2d12 !important;
-		}
-
-		[data-testid="stSidebar"] [role="option"]:hover {
-			background: #ffd6c5 !important;
-		}
-
 		[data-testid="stSidebar"] .stSlider p,
 		[data-testid="stSidebar"] .stToggle label {
 			color: var(--sidebar-muted);
@@ -568,6 +524,10 @@ if not channel_id or not read_api:
 with st.sidebar:
 	st.subheader("Controls")
 	threshold = st.slider("Noise Threshold", 200, 4095, default_threshold, 50)
+	chart_layout = st.selectbox("Chart Layout", ["Combined", "Separate"])
+	chart_type = st.selectbox("Chart Type", ["Line", "Bar", "Pie"])
+	timezone_choice = st.selectbox("Display timezone", ["Local", "UTC"])
+	history_points = st.slider("History points", 10, 100, 30, 5)
 	refresh_sec = st.slider("Live Refresh (sec)", 1, 5, 2, 1)
 	show_raw = st.toggle("Show raw status", value=False)
 
@@ -653,6 +613,26 @@ if show_raw:
 			"last_update": current.last_update,
 			"last_error": current.last_error,
 		}
+	)
+
+st.subheader("History")
+try:
+	history_df = fetch_history(channel_id, read_api, history_points)
+except requests.RequestException as exc:
+	st.error(f"Unable to fetch ThingSpeak history: {exc}")
+	history_df = pd.DataFrame(columns=["time", "sid1", "sid2"])
+
+if history_df.empty:
+	st.info("No history available yet.")
+else:
+	if chart_layout == "Combined":
+		render_combined_chart(history_df, chart_type, threshold)
+	else:
+		render_separate_charts(history_df, chart_type, threshold)
+	st.dataframe(
+		history_df.sort_values("time", ascending=False).head(10),
+		use_container_width=True,
+		hide_index=True,
 	)
 
 time.sleep(refresh_sec)
