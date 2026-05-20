@@ -7,6 +7,11 @@ some screenshots of the analytics dashboard on thingspeak :
 
 <img width="1084" height="357" alt="image" src="https://github.com/user-attachments/assets/d5c92aea-348d-4ec6-ae0b-68232d8a93c0" />
 
+results on website : 
+
+<img width="1493" height="727" alt="image" src="https://github.com/user-attachments/assets/2e2e98a4-5bf3-4b25-9f23-9579468d31f4" />
+
+
 some more results :
 
 <img width="1050" height="670" alt="image" src="https://github.com/user-attachments/assets/a540dba6-afb0-461f-925b-c3c70f4562e8" />
