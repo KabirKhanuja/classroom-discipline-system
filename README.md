@@ -61,3 +61,9 @@ and the best part is that it can be easily deployed on a local server or cloud p
 - the system can be used for various applications, such as noise pollution monitoring, workplace safety, and home security.
 - the system can be easily maintained and updated, allowing for continuous improvement and adaptation to changing needs and technologies.
 - the system can be used for educational purposes, providing a hands-on learning experience for students and hobbyists interested in IoT and environmental monitoring.
+
+
+results from the website :
+
+<img width="998" height="647" alt="image" src="https://github.com/user-attachments/assets/4458093b-e1c6-4408-9b2e-7c9cac847dde" />
+
