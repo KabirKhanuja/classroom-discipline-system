@@ -17,3 +17,10 @@ some more results :
 
 
 how to run : cd app && streamlit run app.py
+
+
+----
+
+alternative architecture 
+
+<img width="4206" height="2961" alt="image" src="https://github.com/user-attachments/assets/6a38595f-9302-47d0-bca0-31d038d8b30f" />
