@@ -78,6 +78,11 @@ def fetch_latest_noise(session: requests.Session, url: str, timeout: int = 5) ->
     return sid1, sid2
 
 
+def fetch_latest_feed(session: requests.Session, url: str, timeout: int = 5) -> dict:
+    """Fetch the latest ThingSpeak feed entry as a raw dict."""
+    return session.get(url, timeout=timeout).json()
+
+
 def annotate_noise_zones(frame, sid1: int, sid2: int, threshold: int):
     annotated = cv2.flip(frame, 1)
     height, width = annotated.shape[:2]

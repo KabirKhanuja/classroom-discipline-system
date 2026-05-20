@@ -2,6 +2,7 @@ import importlib
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 import cv2
 import pandas as pd
@@ -64,7 +65,7 @@ class NoiseCache:
 				self.snapshot.last_error = str(exc)
 
 
-def fetch_history(channel_id: str, read_api: str, results: int) -> pd.DataFrame:
+def fetch_history(channel_id: str, read_api: str, results: int, display_tz: str = "local") -> pd.DataFrame:
 	history_url = (
 		f"https://api.thingspeak.com/channels/{channel_id}/feeds.json"
 		f"?api_key={read_api}&results={results}"
@@ -101,6 +102,16 @@ def fetch_history(channel_id: str, read_api: str, results: int) -> pd.DataFrame:
 
 	if df.empty:
 		return pd.DataFrame(columns=["time", "sid1", "sid2"])
+
+	# Convert to requested display timezone. ThingSpeak times are UTC.
+	if display_tz == "UTC":
+		# Ensure timezone-aware in UTC
+		df["time"] = df["time"].dt.tz_convert("UTC")
+	else:
+		# convert to system local timezone
+		import datetime
+		local_tz = datetime.datetime.now().astimezone().tzinfo
+		df["time"] = df["time"].dt.tz_convert(local_tz)
 
 	df[["sid1", "sid2"]] = df[["sid1", "sid2"]].fillna(0).astype(int)
 	return df
@@ -557,16 +568,12 @@ if not channel_id or not read_api:
 with st.sidebar:
 	st.subheader("Controls")
 	threshold = st.slider("Noise Threshold", 200, 4095, default_threshold, 50)
-	history_points = st.slider("History Points", 20, 500, 120, 20)
-	chart_layout = st.selectbox("Chart Layout", ["Combined", "Separate"])
-	chart_type = st.selectbox("Chart Type", ["Line", "Bar", "Pie"])
-	max_gap_sec = st.slider("Window Merge Gap (sec)", 15, 300, 90, 15)
-	refresh_sec = st.slider("Dashboard Refresh (sec)", 3, 30, 10, 1)
-	auto_refresh = st.toggle("Auto Refresh Analytics", value=True)
+	refresh_sec = st.slider("Live Refresh (sec)", 1, 5, 2, 1)
+	show_raw = st.toggle("Show raw status", value=False)
 
 last_url = get_last_feed_url(channel_id, read_api)
 if "noise_cache" not in st.session_state:
-	st.session_state.noise_cache = NoiseCache(last_url, fetch_interval=5)
+	st.session_state.noise_cache = NoiseCache(last_url, fetch_interval=2)
 
 noise_cache: NoiseCache = st.session_state.noise_cache
 
@@ -631,62 +638,22 @@ metric4.metric("Live Status", status_text)
 if current.last_error:
 	st.warning(f"Latest ThingSpeak fetch warning: {current.last_error}")
 
-st.subheader("ThingSpeak Trends")
-try:
-	history_df = fetch_history(channel_id, read_api, history_points)
-except requests.RequestException as exc:
-	st.error(f"Unable to fetch ThingSpeak history: {exc}")
-	history_df = pd.DataFrame(columns=["time", "sid1", "sid2"])
+if current.last_update:
+	polled_at = datetime.fromtimestamp(current.last_update)
+	st.caption(f"Last live poll: {polled_at.strftime('%Y-%m-%d %H:%M:%S')}")
 
-if history_df.empty:
-	st.info("No valid history available yet. Verify field1 and field2 uploads from ESP32 nodes.")
-else:
-	if chart_layout == "Combined":
-		render_combined_chart(history_df, chart_type, threshold)
-	else:
-		render_separate_charts(history_df, chart_type, threshold)
+st.info("Live mode keeps only the newest ThingSpeak reading on screen so the UI stays current.")
 
-	insights = compute_insights(history_df, threshold)
-	insight1, insight2, insight3 = st.columns(3)
-	insight1.metric("Average Sid1", f"{insights['avg_sid1']:.1f}")
-	insight2.metric("Average Sid2", f"{insights['avg_sid2']:.1f}")
-	insight3.metric("Dominant Disturbance Zone", insights["dominant_side"])
-
-	event1, event2 = st.columns(2)
-	event1.metric(f"Sid1 events > {threshold}", insights["events_sid1"])
-	event2.metric(f"Sid2 events > {threshold}", insights["events_sid2"])
-
-	st.subheader("Recent Samples")
-	st.dataframe(
-		history_df.sort_values("time", ascending=False).head(15),
-		use_container_width=True,
-		hide_index=True,
+if show_raw:
+	st.json(
+		{
+			"sid1": current.sid1,
+			"sid2": current.sid2,
+			"status": status_text,
+			"last_update": current.last_update,
+			"last_error": current.last_error,
+		}
 	)
 
-	st.subheader("Discipline Loss Windows")
-	loss_windows = detect_discipline_loss_windows(history_df, threshold, max_gap_sec=max_gap_sec)
-	if loss_windows.empty:
-		st.success("No discipline-loss windows found for the selected trend range.")
-	else:
-		total_loss_min = loss_windows["duration_min"].sum()
-		window_count = len(loss_windows)
-		c1, c2 = st.columns(2)
-		c1.metric("Loss Windows", window_count)
-		c2.metric("Total Loss Time (min)", f"{total_loss_min:.2f}")
-
-		for idx, row in loss_windows.iterrows():
-			start_txt = row["start_time"].strftime("%H:%M:%S")
-			end_txt = row["end_time"].strftime("%H:%M:%S")
-			st.write(
-				f"{idx + 1}. {start_txt} to {end_txt} | Zone: {row['dominant_zone']} | "
-				f"Peak: {int(row['peak_noise'])}"
-			)
-
-		display_windows = loss_windows.copy()
-		display_windows["start_time"] = display_windows["start_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
-		display_windows["end_time"] = display_windows["end_time"].dt.strftime("%Y-%m-%d %H:%M:%S")
-		st.dataframe(display_windows, use_container_width=True, hide_index=True)
-
-if auto_refresh:
-	time.sleep(refresh_sec)
-	st.rerun()
+time.sleep(refresh_sec)
+st.rerun()
