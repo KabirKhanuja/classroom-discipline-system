@@ -11,6 +11,7 @@ import requests
 import streamlit as st
 
 from cam import annotate_noise_zones, fetch_latest_noise, get_last_feed_url, get_thingspeak_config
+from report import build_pdf_report
 from ui import inject_global_styles, render_status_banner
 
 try:
@@ -300,7 +301,7 @@ def style_figure(fig, palette: dict, x_title: str = "Date", y_title: str = "Nois
 	fig.update_yaxes(gridcolor=palette["grid"], tickfont={"color": palette["text"]}, title_font={"color": palette["text"]})
 
 
-def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
+def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int, key: str | None = None) -> None:
 	palette = get_chart_palette()
 	if chart_type == "Line":
 		fig = px.line(
@@ -325,7 +326,7 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 			line={"color": palette["sid2"]},
 		)
 		style_figure(fig, palette)
-		st.plotly_chart(fig, use_container_width=True)
+		st.plotly_chart(fig, use_container_width=True, key=key)
 		return
 
 	if chart_type == "Bar":
@@ -340,7 +341,7 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 			labels={"time": "Time", "noise": "Noise", "signal": "Signal"},
 		)
 		style_figure(fig, palette)
-		st.plotly_chart(fig, use_container_width=True)
+		st.plotly_chart(fig, use_container_width=True, key=key)
 		return
 
 	pie_df = pd.DataFrame(
@@ -365,20 +366,20 @@ def render_combined_chart(df: pd.DataFrame, chart_type: str, threshold: int) -> 
 		legend={"font": {"color": palette["legend"]}, "title": {"font": {"color": palette["legend"]}}},
 	)
 	fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
-	st.plotly_chart(fig, use_container_width=True)
+	st.plotly_chart(fig, use_container_width=True, key=key)
 
 
-def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) -> None:
+def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int, key_prefix: str | None = None) -> None:
 	col1, col2 = st.columns(2)
 	palette = get_chart_palette()
 
-	def _single_signal(signal_col: str, color: str, title: str, slot) -> None:
+	def _single_signal(signal_col: str, color: str, title: str, slot, key: str | None = None) -> None:
 		if chart_type == "Line":
 			fig = px.line(df, x="time", y=signal_col, labels={"time": "Time", signal_col: "Noise"})
 			fig.update_traces(line={"width": 3, "color": color}, marker={"size": 6})
 			style_figure(fig, palette)
 			fig.update_layout(title=title, legend_title_text="")
-			slot.plotly_chart(fig, use_container_width=True)
+			slot.plotly_chart(fig, use_container_width=True, key=key)
 			return
 
 		if chart_type == "Bar":
@@ -386,7 +387,7 @@ def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) ->
 			fig.update_traces(marker_color=color)
 			style_figure(fig, palette)
 			fig.update_layout(title=title, legend_title_text="")
-			slot.plotly_chart(fig, use_container_width=True)
+			slot.plotly_chart(fig, use_container_width=True, key=key)
 			return
 
 		high_count = int((df[signal_col] > threshold).sum())
@@ -415,8 +416,8 @@ def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) ->
 		fig.update_traces(textposition="inside", textinfo="percent+label", textfont={"color": palette["text"]})
 		slot.plotly_chart(fig, use_container_width=True)
 
-	_single_signal("sid1", palette["sid1"], "SID1 Trend", col1)
-	_single_signal("sid2", palette["sid2"], "SID2 Trend", col2)
+	_single_signal("sid1", palette["sid1"], "SID1 Trend", col1, f"{key_prefix}_sid1" if key_prefix else None)
+	_single_signal("sid2", palette["sid2"], "SID2 Trend", col2, f"{key_prefix}_sid2" if key_prefix else None)
 
 
 st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
@@ -533,6 +534,99 @@ if show_raw:
 		}
 	)
 
+if "sessions" not in st.session_state:
+	st.session_state.sessions = []
+if "active_session_id" not in st.session_state:
+	st.session_state.active_session_id = None
+
+
+def get_active_session():
+	sid = st.session_state.active_session_id
+	if sid is None:
+		return None
+	for sess in st.session_state.sessions:
+		if sess["id"] == sid:
+			return sess
+	return None
+
+
+def session_dataframe(sess) -> pd.DataFrame:
+	if not sess["samples"]:
+		return pd.DataFrame(columns=["time", "sid1", "sid2"])
+	return pd.DataFrame(sess["samples"])
+
+
+active_session = get_active_session()
+if active_session is not None:
+	active_session["samples"].append(
+		{"time": datetime.now(), "sid1": int(current.sid1), "sid2": int(current.sid2)}
+	)
+
+st.subheader("Classroom Sessions")
+st.caption(
+	"Track one class period live. Start when the class begins and stop when it ends; "
+	"each stopped session is graphed on its own below. The 12-hour history further down is unaffected."
+)
+
+session_ctrl_left, session_ctrl_right = st.columns([1, 3])
+with session_ctrl_left:
+	if active_session is None:
+		if st.button("Start session", use_container_width=True, type="primary"):
+			new_id = max((s["id"] for s in st.session_state.sessions), default=0) + 1
+			st.session_state.sessions.append(
+				{
+					"id": new_id,
+					"name": f"Session {new_id}",
+					"start_time": datetime.now(),
+					"end_time": None,
+					"samples": [],
+				}
+			)
+			st.session_state.active_session_id = new_id
+			st.rerun()
+	else:
+		if st.button("Stop session", use_container_width=True):
+			active_session["end_time"] = datetime.now()
+			st.session_state.active_session_id = None
+			st.rerun()
+
+with session_ctrl_right:
+	if active_session is not None:
+		elapsed = datetime.now() - active_session["start_time"]
+		e_min, e_sec = divmod(int(elapsed.total_seconds()), 60)
+		st.markdown(
+			f"**Recording {active_session['name']}** &mdash; live since "
+			f"{active_session['start_time'].strftime('%H:%M:%S')} · elapsed {e_min}m {e_sec}s · "
+			f"{len(active_session['samples'])} points captured"
+		)
+	elif st.session_state.sessions:
+		st.markdown(f"{len(st.session_state.sessions)} session(s) recorded so far. Press **Start session** to add another.")
+	else:
+		st.markdown("No sessions yet. Press **Start session** to begin tracking a class period.")
+
+if active_session is not None:
+	live_df = session_dataframe(active_session)
+	if live_df.empty:
+		st.info("Waiting for the first live reading…")
+	else:
+		render_combined_chart(live_df, chart_type, threshold, key="session_active_live")
+
+stopped_sessions = [s for s in st.session_state.sessions if s["end_time"] is not None]
+for sess in reversed(stopped_sessions):
+	duration = sess["end_time"] - sess["start_time"]
+	d_min, d_sec = divmod(int(duration.total_seconds()), 60)
+	label = (
+		f"{sess['name']} · {sess['start_time'].strftime('%H:%M:%S')} → "
+		f"{sess['end_time'].strftime('%H:%M:%S')} · {d_min}m {d_sec}s"
+	)
+	with st.expander(label, expanded=False):
+		session_df = session_dataframe(sess)
+		if session_df.empty:
+			st.info("No data was captured during this session.")
+		else:
+			render_combined_chart(session_df, chart_type, threshold, key=f"sess{sess['id']}_combined")
+			render_separate_charts(session_df, chart_type, threshold, key_prefix=f"sess{sess['id']}")
+
 st.subheader("History")
 try:
 	history_limit = get_history_row_limit(hours=12, sample_interval_sec=15)
@@ -577,6 +671,63 @@ else:
 		)
 
 	st.caption(f"Showing {min(visible_rows, len(history_sorted))} of {len(history_sorted)} rows from the last 12 hours.")
+
+st.subheader("Report")
+st.caption("Generate a formatted PDF summary of the current snapshot, 12-hour trends and discipline-loss windows.")
+report_col1, report_col2 = st.columns([1, 2])
+with report_col1:
+	if st.button("Generate report (PDF)", use_container_width=True):
+		report_insights = compute_insights(history_df, threshold)
+		report_windows = detect_discipline_loss_windows(history_df, threshold)
+
+		report_sessions = []
+		for sess in st.session_state.get("sessions", []):
+			if sess["end_time"] is None:
+				continue
+			session_df = session_dataframe(sess)
+			if session_df.empty:
+				continue
+			total = len(session_df)
+			calm = int(((session_df["sid1"] <= threshold) & (session_df["sid2"] <= threshold)).sum())
+			report_sessions.append(
+				{
+					"name": sess["name"],
+					"start_time": sess["start_time"],
+					"end_time": sess["end_time"],
+					"df": session_df,
+					"insights": compute_insights(session_df, threshold),
+					"windows_df": detect_discipline_loss_windows(session_df, threshold),
+					"discipline_pct": (calm / total * 100.0) if total else 0.0,
+				}
+			)
+
+		generated_at = datetime.now()
+		st.session_state["report_pdf"] = build_pdf_report(
+			generated_at=generated_at,
+			threshold=threshold,
+			current_sid1=current.sid1,
+			current_sid2=current.sid2,
+			status_text=status_text,
+			history_df=history_df,
+			insights=report_insights,
+			windows_df=report_windows,
+			sessions=report_sessions,
+		)
+		st.session_state["report_generated_at"] = generated_at
+
+if st.session_state.get("report_pdf"):
+	gen_at = st.session_state.get("report_generated_at")
+	stamp = gen_at.strftime("%Y%m%d_%H%M%S") if gen_at else "report"
+	with report_col2:
+		st.download_button(
+			"Download report PDF",
+			data=st.session_state["report_pdf"],
+			file_name=f"Smart_Classroom_Discipline_Monitoring_{stamp}.pdf",
+			mime="application/pdf",
+			use_container_width=True,
+		)
+		if gen_at:
+			st.caption(f"Report generated: {gen_at.strftime('%Y-%m-%d %H:%M:%S')}")
 
 time.sleep(refresh_sec)
 st.rerun()
