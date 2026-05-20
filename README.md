@@ -1,4 +1,22 @@
 ## Diagram
+
+## Architecture 1: Aggregator-Based Centralized Architecture
+
+<p align="center">
+  <img src="assets/smart_classroom_monitoring_agregator.png" width="800"/>
+</p>
+
+This architecture represents a centralized communication and data aggregation model. Multiple ESP32-based classroom monitoring nodes collect classroom sound/noise data and send their readings to a central aggregator module/server through wireless communication. The aggregator processes, filters, and combines data from all nodes before collectively uploading it to the ThinkSpeak cloud platform. The frontend dashboard then fetches the processed data from ThinkSpeak APIs for real-time monitoring, analytics, and visualization. This architecture improves centralized data management and reduces direct cloud communication from individual nodes.
+
+---
+
+## Architecture 2: Direct Cloud Communication Architecture
+
+<p align="center">
+  <img src="assets/smart_classroom_monitoring_architecture1.png" width="800"/>
+</p>
+
+This architecture represents a decentralized communication model where each ESP32-based classroom monitoring node independently collects classroom sound/noise data and directly sends the readings to its respective ThinkSpeak cloud channel over Wi-Fi. The frontend dashboard retrieves real-time data directly from the ThinkSpeak cloud using APIs for visualization, analytics, and classroom monitoring. In this approach, every node communicates with the cloud individually without any intermediate processing layer.
 <img width="4206" height="2417" alt="image" src="https://github.com/user-attachments/assets/7460546e-ab54-4d52-b028-91d2cc582f26" />
 
 public url of analytics : https://thingspeak.mathworks.com/channels/3351889
