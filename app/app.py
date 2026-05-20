@@ -11,6 +11,7 @@ import requests
 import streamlit as st
 
 from cam import annotate_noise_zones, fetch_latest_noise, get_last_feed_url, get_thingspeak_config
+from ui import inject_global_styles, render_status_banner
 
 try:
 	av = importlib.import_module("av")
@@ -420,99 +421,7 @@ def render_separate_charts(df: pd.DataFrame, chart_type: str, threshold: int) ->
 
 st.set_page_config(page_title="Smart Classroom Monitor", layout="wide")
 
-st.markdown(
-	"""
-	<style>
-		:root {
-			--app-bg-start: #f7f8fb;
-			--app-bg-end: #eef2f7;
-			--text-main: #1f2937;
-			--text-subtle: #4b5563;
-			--panel-bg: #ffffff;
-			--panel-border: #d8dee8;
-			--panel-shadow: 0 8px 18px rgba(20, 33, 61, 0.05);
-			--sidebar-bg: #f8fafc;
-			--sidebar-border: #d9e2ec;
-			--sidebar-heading: #111827;
-			--sidebar-text: #374151;
-			--sidebar-muted: #6b7280;
-		}
-
-		html[data-theme="dark"] {
-			--app-bg-start: #111827;
-			--app-bg-end: #0f172a;
-			--text-main: #e5e7eb;
-			--text-subtle: #cbd5e1;
-			--panel-bg: #111827;
-			--panel-border: #334155;
-			--panel-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
-			--sidebar-bg: #111827;
-			--sidebar-border: #374151;
-			--sidebar-heading: #f3f4f6;
-			--sidebar-text: #e5e7eb;
-			--sidebar-muted: #94a3b8;
-		}
-
-		.stApp {
-			background: linear-gradient(120deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
-			color: var(--text-main);
-		}
-
-		h1, h2, h3, h4, h5, h6, p, span, label, div {
-			color: var(--text-main);
-		}
-
-		[data-testid="stCaptionContainer"] p,
-		[data-testid="stSidebar"] p,
-		[data-testid="stSidebar"] label {
-			color: var(--text-subtle);
-		}
-
-		[data-testid="stSidebar"] {
-			background: var(--sidebar-bg);
-			border-right: 1px solid var(--sidebar-border);
-		}
-
-		[data-testid="stSidebar"] h1,
-		[data-testid="stSidebar"] h2,
-		[data-testid="stSidebar"] h3 {
-			color: var(--sidebar-heading);
-			font-weight: 650;
-		}
-
-		[data-testid="stSidebar"] p,
-		[data-testid="stSidebar"] label,
-		[data-testid="stSidebar"] span,
-		[data-testid="stSidebar"] div {
-			color: var(--sidebar-text);
-		}
-
-		[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {
-			padding-top: 0.2rem;
-			padding-bottom: 0.2rem;
-		}
-
-		[data-testid="stSidebar"] .stSlider p,
-		[data-testid="stSidebar"] .stToggle label {
-			color: var(--sidebar-muted);
-		}
-
-		.block-container {
-			padding-top: 1.2rem;
-			max-width: 1200px;
-		}
-
-		.panel {
-			padding: 0.9rem 1rem;
-			border-radius: 14px;
-			border: 1px solid var(--panel-border);
-			background: var(--panel-bg);
-			box-shadow: var(--panel-shadow);
-		}
-	</style>
-	""",
-	unsafe_allow_html=True,
-)
+inject_global_styles()
 
 st.title("Smart Classroom Discipline Monitoring")
 st.caption("Live camera localization with ThingSpeak-backed noise analytics")
@@ -586,18 +495,23 @@ except Exception:
 	current = NoiseSnapshot()
 
 status_text = "Normal"
+status_severity = "normal"
 if current.sid1 > threshold and current.sid2 > threshold:
 	status_text = "High disturbance on both sides"
+	status_severity = "alert"
 elif current.sid1 > threshold:
 	status_text = "High disturbance on left side"
+	status_severity = "warn"
 elif current.sid2 > threshold:
 	status_text = "High disturbance on right side"
+	status_severity = "warn"
 
-metric1, metric2, metric3, metric4 = st.columns(4)
+metric1, metric2, metric3 = st.columns(3)
 metric1.metric("Sid1 (Left)", current.sid1)
 metric2.metric("Sid2 (Right)", current.sid2)
 metric3.metric("Difference", abs(current.sid1 - current.sid2))
-metric4.metric("Live Status", status_text)
+
+render_status_banner(status_text, status_severity)
 
 if current.last_error:
 	st.warning(f"Latest ThingSpeak fetch warning: {current.last_error}")
