@@ -117,6 +117,10 @@ def fetch_history(channel_id: str, read_api: str, results: int, display_tz: str 
 	return df
 
 
+def get_history_row_limit(hours: int = 12, sample_interval_sec: int = 15) -> int:
+	return int((hours * 60 * 60) / sample_interval_sec)
+
+
 def compute_insights(df: pd.DataFrame, threshold: int) -> dict:
 	if df.empty:
 		return {
@@ -617,7 +621,8 @@ if show_raw:
 
 st.subheader("History")
 try:
-	history_df = fetch_history(channel_id, read_api, history_points)
+	history_limit = get_history_row_limit(hours=12, sample_interval_sec=15)
+	history_df = fetch_history(channel_id, read_api, history_limit)
 except requests.RequestException as exc:
 	st.error(f"Unable to fetch ThingSpeak history: {exc}")
 	history_df = pd.DataFrame(columns=["time", "sid1", "sid2"])
@@ -629,11 +634,35 @@ else:
 		render_combined_chart(history_df, chart_type, threshold)
 	else:
 		render_separate_charts(history_df, chart_type, threshold)
+
+	history_sorted = history_df.sort_values("time", ascending=False).reset_index(drop=True)
+	page_key = "history_rows_visible"
+	if page_key not in st.session_state:
+		st.session_state[page_key] = 10
+
+	visible_rows = st.session_state[page_key]
 	st.dataframe(
-		history_df.sort_values("time", ascending=False).head(10),
+		history_sorted.head(visible_rows),
 		use_container_width=True,
 		hide_index=True,
 	)
+
+	button_col1, button_col2 = st.columns(2)
+	with button_col1:
+		if st.button("Show more", use_container_width=True):
+			st.session_state[page_key] = min(visible_rows + 10, len(history_sorted))
+			st.rerun()
+	with button_col2:
+		csv_data = history_sorted.to_csv(index=False).encode("utf-8")
+		st.download_button(
+			"Download CSV",
+			data=csv_data,
+			file_name="thingspeak_history_12h.csv",
+			mime="text/csv",
+			use_container_width=True,
+		)
+
+	st.caption(f"Showing {min(visible_rows, len(history_sorted))} of {len(history_sorted)} rows from the last 12 hours.")
 
 time.sleep(refresh_sec)
 st.rerun()
